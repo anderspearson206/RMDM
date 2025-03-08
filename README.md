@@ -4,7 +4,7 @@
 
 ## 🌟 Project Highlights
 
-![RMDM Model Structure](fig\RMDM.jpeg)
+![RMDM Model Structure](RMDM.jpeg)
 
 - 🧠 **Physics-Informed AI**: Equipping neural networks with electromagnetic wisdom, enabling AI to think using Helmholtz equations.
 - 🎭 **Dual U-Net Architecture**: Two neural nets—one handling physical laws, the other refining details—working seamlessly to reconstruct radio maps.
