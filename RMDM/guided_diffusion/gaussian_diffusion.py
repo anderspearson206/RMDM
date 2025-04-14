@@ -1853,58 +1853,80 @@ class GaussianDiffusion:
             raise NotImplementedError(self.loss_type)
 
         return (terms, model_output)
-    
 
-    def cal_pinn(self,cal, buildings, shooter, k=1.0, k_building=0.5):
-        # 如果输入为 Tensor，则转换为 NumPy 数组
+
+    def cal_pinn(self, cal, buildings, shooter, k=1.0, k_building=1.0): # Adjusted default k_building
+        """
+        Calculates PINN loss batch-wise for path loss prediction based on dataset description
+        where cal = 1.0 means LOW path loss (HIGH signal strength, near source)
+        and cal = 0.0 means HIGH path loss (LOW signal strength, inside building/far away).
+
+        Args:
+            cal (np.ndarray or torch.Tensor): Predicted normalized signal strength level (f/255).
+                                              Shape (bs, H, W). Values near 1 mean low PL, near 0 mean high PL.
+            buildings (np.ndarray or torch.Tensor): Building mask. Shape (bs, H, W). 1 for building, 0 otherwise.
+            shooter (np.ndarray or torch.Tensor): Source/transmitter location mask. Shape (bs, H, W). 1 for source, 0 otherwise.
+            k (float): Heuristic parameter for wave-like behavior in free space. Needs tuning.
+            k_building (float): Heuristic parameter for wave-like behavior inside buildings. Needs tuning.
+
+        Returns:
+            list: A list containing the calculated PINN loss for each item in the batch.
+                  Note: Returning a list might not be ideal for backpropagation if using PyTorch/TensorFlow.
+                  Consider returning the mean loss or stacking the losses into a tensor.
+        """
+        # --- Input Conversion ---
         if hasattr(cal, 'detach'):
             cal = cal.detach().cpu().numpy()
         if hasattr(buildings, 'detach'):
             buildings = buildings.detach().cpu().numpy()
         if hasattr(shooter, 'detach'):
             shooter = shooter.detach().cpu().numpy()
-        
+
         bs, H, W = cal.shape
         loss_list = []
-        from scipy.ndimage import binary_erosion
-        
-        for i in range(bs):
-            
-            lap = np.zeros_like(cal[i])
-            lap[1:-1, 1:-1] = (
-                cal[i, 2:, 1:-1] + cal[i, :-2, 1:-1] +
-                cal[i, 1:-1, 2:] + cal[i, 1:-1, :-2] -
-                4 * cal[i, 1:-1, 1:-1]
-            )
-            
-            
-            k_map = np.where(buildings[i] == 1, k_building, k)
-            
-            # lap + k_map² * cal - shooter
-            r = lap + (k_map ** 2) * cal[i] - shooter[i]
-            L_pde = np.mean(r ** 2)
-            
-            
-            buildings_bool = buildings[i].astype(bool)
-            buildings_edge = buildings_bool & ~binary_erosion(buildings_bool, iterations=1)
-            if np.any(buildings_edge):
-                L_bc = np.mean((cal[i][buildings_edge]) ** 2)
-            else:
-                L_bc = 0.0
-            
-            
-            shooter_mask = (shooter[i] == 1)
-            if np.any(shooter_mask):
-                L_source = np.mean((cal[i][shooter_mask] - 1.0) ** 2)
-            else:
-                L_source = 0.0
-            
-            
-            loss = L_pde + 0.5 * L_bc + 0.2 * L_source
-            loss_list.append(loss)
-            
-        return loss_list
+        # from scipy.ndimage import binary_erosion # Moved import to top
 
+        for i in range(bs):
+            cal_i = cal[i]
+            buildings_i = buildings[i]
+            shooter_i = shooter[i]
+
+            # --- 1. PDE Loss (L_pde) ---
+            lap = np.zeros_like(cal_i)
+            lap[1:-1, 1:-1] = (
+                cal_i[2:, 1:-1] + cal_i[:-2, 1:-1] +
+                cal_i[1:-1, 2:] + cal_i[1:-1, :-2] -
+                4 * cal_i[1:-1, 1:-1]
+            )
+
+            
+            k_map = np.where(buildings_i == 1, k_building, k)
+
+            # Calculate the PDE residual (Heuristic: ∇²(Signal) + k_map² * Signal ≈ 0)
+            r = lap + (k_map ** 2) * cal_i
+            L_pde = np.mean(r ** 2)
+
+            # --- 2. Boundary Condition Loss (L_bc) ---
+            buildings_mask = (buildings_i == 1)
+            if np.any(buildings_mask):
+                
+                L_bc = np.mean((cal_i[buildings_mask]) ** 2)
+            else:
+                L_bc = 0.0 
+
+            # --- 3. Source Condition Loss (L_source) ---
+            shooter_mask = (shooter_i == 1)
+            if np.any(shooter_mask):
+                L_source = np.mean((cal_i[shooter_mask] - 1.0) ** 2)
+            else:
+                L_source = 0.0 
+            # --- Total Loss for this sample ---
+            
+            loss = L_pde + 1.0 * L_bc + 1.0 * L_source 
+            loss_list.append(loss)
+
+        
+        return loss_list
 
 
     
