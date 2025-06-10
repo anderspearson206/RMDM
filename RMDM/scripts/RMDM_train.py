@@ -18,6 +18,7 @@ from visdom import Visdom
 viz = Visdom(port=8850)
 import torchvision.transforms as transforms
 from RadioUNet.lib import loaders, modules
+from RadioUNet import loaders2
 
 def main():
     args = create_argparser().parse_args()
@@ -28,29 +29,35 @@ def main():
     logger.log("creating data loader...")
 
     
-    if args.data_name not in ['Radio', 'Radio_2', 'Radio_3']:
-        args.data_name = 'Radio'
-        ds = loaders.RadioUNet_c(phase="train")
+    # if args.data_name not in ['Radio', 'Radio_2', 'Radio_3']:
+    # if args.data_name not in ['Radio', 'Radio_2', 'Radio_3']:
+    if args.data_name == 'Lunar':
+        # This now points to your custom LunarLoader
+        # Ensure the root_dir points to the correct location in your Drive
+        ds = loaders2.LunarLoader2_los(phase="train", root_dir=args.data_dir, use_los_input=True, heavy_aug=True, non_global_norm=False)
+        args.in_ch = 4 # DEM + LOS + Pathloss + Ground Truth
+
+    elif args.data_name == 'Radio':
+        # NOTE: Ensure the RadioUNet dataset path is correct if you use this
+        ds = loaders.RadioUNet_c(phase="train", dir_dataset=args.data_dir)
         args.in_ch = 3
 
-
     elif args.data_name == 'Radio_2':
-        
-        
-        ds = loaders.RadioUNet_s(phase="train", carsSimul="yes", carsInput="yes")
+        # NOTE: Ensure the RadioUNet dataset path is correct if you use this
+        ds = loaders.RadioUNet_s(phase="train", dir_dataset=args.data_dir, carsSimul="yes", carsInput="yes")
         args.in_ch = 5
 
     elif args.data_name == 'Radio_3':
-
-
-        ds = loaders.RadioUNet_s(phase="train", simulation="rand", cityMap="missing", missing=4,dir_dataset="/home/user/dxc/motion/MedSegDiff/RadioUNet/RadioMapSeer/")
+        # NOTE: Ensure the RadioUNet dataset path is correct if you use this
+        ds = loaders.RadioUNet_s(phase="train", dir_dataset=args.data_dir, simulation="rand", cityMap="missing", missing=4)
         args.in_ch = 4
-    else :
+
+    else: # A fallback for a custom dataset
         tran_list = [transforms.Resize((args.image_size,args.image_size)), transforms.ToTensor(),]
         transform_train = transforms.Compose(tran_list)
-        print("Your current directory : ",args.data_dir)
+        logger.log(f"Loading custom dataset from: {args.data_dir}")
         ds = CustomDataset(args, args.data_dir, transform_train)
-        args.in_ch = 4
+        args.in_ch = 4 # Adjust as needed for your custom data
         
     datal= th.utils.data.DataLoader(
         ds,
@@ -95,8 +102,8 @@ def main():
 
 def create_argparser():
     defaults = dict(
-        data_name = 'BRATS',
-        data_dir="../dataset/brats2020/training",
+        data_name = 'Radio',
+        data_dir="../RadioMapSeer/",
         schedule_sampler="uniform",
         lr=1e-4,
         weight_decay=0.0,
@@ -105,13 +112,13 @@ def create_argparser():
         microbatch=-1,  # -1 disables microbatches
         ema_rate="0.9999",  # comma-separated list of EMA values
         log_interval=100,
-        save_interval=5000,
+        save_interval=20000,
         resume_checkpoint=None, #"/results/pretrainedmodel.pt"
         use_fp16=False,
         fp16_scale_growth=1e-3,
         gpu_dev = "0",
         multi_gpu = None, #"0,1,2"
-        out_dir='./results/'
+        out_dir='./results_reg/'
     )
     defaults.update(model_and_diffusion_defaults())
     parser = argparse.ArgumentParser()

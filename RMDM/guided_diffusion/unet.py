@@ -174,7 +174,7 @@ def conv_dw(inp, oup, stride):
     )
 
 class MobBlock(nn.Module):
-    This block is designed for specific radio-related operations, perhaps for feature extraction from radio signals.
+    # This block is designed for specific radio-related operations, perhaps for feature extraction from radio signals.
     def __init__(self,ind):
         super().__init__()
 
@@ -468,7 +468,7 @@ class QKVAttention(nn.Module):
         return count_flops_attn(model, _x, y)
 
 class FFParser(nn.Module):
-    This module is designed for parsing radio signal features, perhaps using frequency domain analysis.
+    # This module is designed for parsing radio signal features, perhaps using frequency domain analysis.
     def __init__(self, dim, h=128, w=65):
         super().__init__()
         self.complex_weight = nn.Parameter(torch.randn(dim, h, w, 2, dtype=torch.float32) * 0.02)
